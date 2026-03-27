@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EtherGalleries — Broadcast Sender</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Josefin+Sans:wght@100;300;400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --black: #080808;
+      --deep: #0d0d0d;
+      --surface: #111111;
+      --card: #161616;
+      --border: rgba(255,255,255,0.07);
+      --border-hover: rgba(255,255,255,0.18);
+      --gold: #22c55e;
+      --gold-dim: #22c55e;
+      --gold-glow: rgba(201,169,110,0.15);
+      --white: #f0ece4;
+      --muted: #6a6560;
+      --text: #c8c4bc;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--black);
+      font-family: 'Josefin Sans', sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── NOISE OVERLAY ── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.6;
+    }
+
+    /* ── AMBIENT GLOW ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 400px;
+      background: radial-gradient(ellipse, rgba(201,169,110,0.06) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── HEADER ── */
+    header {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 56px 20px 40px;
+      border-bottom: 1px solid var(--border);
+      animation: fadeDown 0.9s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .logo-lockup {
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .logo-eyebrow {
+      font-family: 'Josefin Sans', sans-serif;
+      font-weight: 100;
+      font-size: 10px;
+      letter-spacing: 0.4em;
+      color: var(--gold);
+      text-transform: uppercase;
+    }
+
+    .logo-main {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 38px;
+      letter-spacing: 0.12em;
+      color: var(--white);
+      line-height: 1;
+    }
+
+    .logo-main em {
+      font-style: italic;
+      color: var(--gold);
+    }
+
+    .logo-rule {
+      width: 60px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+      margin: 10px auto 0;
+    }
+
+    .header-sub {
+      margin-top: 14px;
+      font-weight: 100;
+      font-size: 11px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── MAIN LAYOUT ── */
+    main {
+      position: relative;
+      z-index: 10;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      animation: fadeUp 0.9s 0.15s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    @media (max-width: 760px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    /* ── PANELS ── */
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 36px 32px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.4s;
+    }
+
+    .panel:first-child {
+      border-radius: 2px 0 0 2px;
+    }
+    .panel:last-child {
+      border-radius: 0 2px 2px 0;
+      border-left: none;
+    }
+
+    @media (max-width: 760px) {
+      .panel:first-child { border-radius: 2px 2px 0 0; }
+      .panel:last-child { border-radius: 0 0 2px 2px; border-left: 1px solid var(--border); border-top: none; }
+    }
+
+    .panel::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .panel:hover::before { opacity: 1; }
+
+    /* Corner ornaments */
+    .panel::after {
+      content: '';
+      position: absolute;
+      top: 12px; right: 12px;
+      width: 12px; height: 12px;
+      border-top: 1px solid var(--gold-dim);
+      border-right: 1px solid var(--gold-dim);
+      opacity: 0.4;
+    }
+
+    .panel-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: 22px;
+      letter-spacing: 0.08em;
+      color: var(--white);
+      margin-bottom: 6px;
+    }
+
+    .panel-desc {
+      font-size: 10px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── FORM FIELDS ── */
+    .field {
+      margin-bottom: 20px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 9px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold-dim);
+      margin-bottom: 8px;
+      font-weight: 400;
+    }
+
+    .field input,
+    .field textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 1px;
+      padding: 12px 14px;
+      color: var(--white);
+      font-family: 'Josefin Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 300;
+      letter-spacing: 0.05em;
+      outline: none;
+      transition: border-color 0.3s, box-shadow 0.3s;
+      -webkit-appearance: none;
+    }
+
+    .field input::placeholder,
+    .field textarea::placeholder {
+      color: var(--muted);
+      font-weight: 100;
+    }
+
+    .field input:focus,
+    .field textarea:focus {
+      border-color: var(--gold-dim);
+      box-shadow: 0 0 0 1px rgba(201,169,110,0.1), inset 0 0 20px rgba(201,169,110,0.03);
+    }
+
+    .field textarea {
+      resize: vertical;
+      min-height: 110px;
+      line-height: 1.7;
+    }
+
+    /* ── SEND BUTTON ── */
+    .send-btn {
+      width: 100%;
+      margin-top: 28px;
+      padding: 15px 24px;
+      background: transparent;
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      font-family: 'Josefin Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 300;
+      letter-spacing: 0.4em;
+      text-transform: uppercase;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: color 0.4s, border-color 0.4s;
+      border-radius: 1px;
+    }
+
+    .send-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, var(--gold) 0%, #22c55e 100%);
+      transform: translateY(100%);
+      transition: transform 0.4s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    .send-btn:hover::before { transform: translateY(0); }
+    .send-btn:hover { color: var(--black); border-color: var(--gold); }
+
+    .send-btn span {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── STATUS ── */
+    #status {
+      margin-top: 14px;
+      font-size: 11px;
+      letter-spacing: 0.15em;
+      text-align: center;
+      min-height: 18px;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+
+    #status.success { color: var(--gold); }
+    #status.error { color: #c06060; }
+
+    /* ── PREVIEW PANEL ── */
+    .preview-wrap {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .preview-chrome {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 1px 1px 0 0;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 0;
+    }
+
+    .chrome-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border-hover);
+    }
+
+    .chrome-label {
+      margin-left: auto;
+      font-size: 9px;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    iframe {
+      flex: 1;
+      width: 100%;
+      min-height: 420px;
+      border: 1px solid var(--border);
+      border-radius: 0 0 1px 1px;
+      background: #fff;
+      display: block;
+    }
+
+    /* ── DECORATIVE COUNTER ── */
+    .field-index {
+      position: absolute;
+      right: 0;
+      top: 0;
+      font-size: 9px;
+      color: var(--border-hover);
+      letter-spacing: 0.1em;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      position: relative;
+      z-index: 10;
+      text-align: center;
+      padding: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    footer span { color: var(--gold-dim); }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Loading pulse on button */
+    .send-btn.loading span::after {
+      content: '';
+      display: inline-block;
+      width: 10px;
+      text-align: left;
+      animation: dots 1.2s steps(3, end) infinite;
+    }
+    @keyframes dots {
+      0%   { content: '.'; }
+      33%  { content: '..'; }
+      66%  { content: '...'; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-lockup">
+      <div class="logo-eyebrow">Digital Provenance</div>
+      <div class="logo-main">Ether<em>Galleries</em></div>
+      <div class="logo-rule"></div>
+      <div class="header-sub">Broadcast Transmission</div>
+    </div>
+  </header>
+
+  <main>
+    <!-- COMPOSE PANEL -->
+    <div class="panel">
+      <div class="panel-title">Compose</div>
+      <div class="panel-desc">Authenticated transmission · Resend API</div>
+
+      <div class="field">
+        <label>API Credential</label>
+        <input type="password" id="apiKey" placeholder="re_••••••••••••••••" />
+      </div>
+
+      <div class="field">
+        <label>Recipient Name</label>
+        <input type="text" id="nameInput" placeholder="e.g. Felicity" />
+      </div>
+
+      <div class="field">
+        <label>Recipient Address</label>
+        <input type="email" id="emailInput" placeholder="collector@example.com" />
+      </div>
+
+      <div class="field">
+        <label>Subject Line</label>
+        <input type="text" id="subjectInput" placeholder="Your acquisition has been confirmed" />
+      </div>
+
+      <div class="field">
+        <label>Message Body</label>
+        <textarea id="messageInput" placeholder="Compose your message to the collector…"></textarea>
+      </div>
+
+      <button class="send-btn" id="sendBtn">
+        <span>Transmit Message</span>
+      </button>
+      <div id="status"></div>
+    </div>
+
+    <!-- PREVIEW PANEL -->
+    <div class="panel preview-wrap">
+      <div class="panel-title">Preview</div>
+      <div class="panel-desc">Live render · Collector-facing template</div>
+
+      <div class="preview-chrome">
+        <div class="chrome-dot"></div>
+        <div class="chrome-dot"></div>
+        <div class="chrome-dot"></div>
+        <div class="chrome-label">Email Preview</div>
+      </div>
+      <iframe id="emailPreview" title="Email Preview"></iframe>
+    </div>
+  </main>
+
+  <footer>
+    <span>EtherGalleries</span> &nbsp;·&nbsp; Digital Provenance Platform &nbsp;·&nbsp; Encrypted Transmission
+  </footer>
+
+  <script>
+    const nameInput     = document.getElementById("nameInput");
+    const emailInput    = document.getElementById("emailInput");
+    const subjectInput  = document.getElementById("subjectInput");
+    const messageInput  = document.getElementById("messageInput");
+    const apiInput      = document.getElementById("apiKey");
+    const emailPreview  = document.getElementById("emailPreview");
+    const statusEl      = document.getElementById("status");
+    const sendBtn       = document.getElementById("sendBtn");
+
+    function generateHTML(name, message) {
+      return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/></head>
+<body style="margin:0;padding:0;background:#0a0a0a;font-family:'Georgia',serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0a0a;padding:40px 0;">
+    <tr><td align="center">
+
+      <!-- Logo row -->
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;">
+        <tr>
+          <td align="center" style="padding:0 0 24px;">
+            <img src="https://res.cloudinary.com/dsyjlantq/image/upload/v1762106609/xibx2tesi9kzsnmshv2c.png" width="44" height="44" alt="EtherGalleries" style="display:block;margin:0 auto 12px;"/>
+            <div style="font-family:'Georgia',serif;font-size:22px;letter-spacing:0.14em;color:#22c55e;font-weight:normal;">EtherGalleries</div>
+            <div style="width:40px;height:1px;background:linear-gradient(90deg,transparent,#22c55e,transparent);margin:10px auto 0;"></div>
+          </td>
+        </tr>
+      </table>
+
+      <!-- Card -->
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#111111;border:1px solid #222222;border-radius:2px;overflow:hidden;">
+
+        <!-- Top gold rule -->
+        <tr><td style="height:1px;background:linear-gradient(90deg,transparent,#22c55e55,transparent);"></td></tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:44px 48px 36px;">
+            <p style="margin:0 0 8px;font-family:'Georgia',serif;font-size:11px;letter-spacing:0.3em;text-transform:uppercase;color:#22c55e;">Private Correspondence</p>
+            <p style="margin:0 0 28px;font-family:'Georgia',serif;font-size:24px;font-weight:normal;color:#f0ece4;letter-spacing:0.04em;">Hello, <em style="color:#22c55e;">${name}</em></p>
+            <div style="width:32px;height:1px;background:#333;margin-bottom:28px;"></div>
+            <p style="margin:0;font-family:'Georgia',serif;font-size:15px;line-height:1.85;color:#b0aca4;">${message.replace(/\n/g, '<br/>')}</p>
+          </td>
+        </tr>
+
+        <!-- Signature -->
+        <tr>
+          <td style="padding:0 48px 40px;">
+            <p style="margin:32px 0 0;font-family:'Georgia',serif;font-size:13px;color:#6a6560;font-style:italic;">With regards,</p>
+            <p style="margin:4px 0 0;font-family:'Georgia',serif;font-size:14px;color:#22c55e;letter-spacing:0.06em;">The EtherGalleries Curation Team</p>
+          </td>
+        </tr>
+
+        <!-- Bottom gold rule -->
+        <tr><td style="height:1px;background:linear-gradient(90deg,transparent,#22c55e33,transparent);"></td></tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#0d0d0d;padding:24px 48px;text-align:center;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="center" style="padding-bottom:14px;">
+                  <a href="#" style="display:inline-block;margin:0 8px;"><img src="https://cdn-icons-png.flaticon.com/512/174/174855.png" width="16" height="16" style="filter:grayscale(1) brightness(0.5);"/></a>
+                  <a href="#" style="display:inline-block;margin:0 8px;"><img src="https://cdn-icons-png.flaticon.com/512/145/145807.png" width="16" height="16" style="filter:grayscale(1) brightness(0.5);"/></a>
+                  <a href="#" style="display:inline-block;margin:0 8px;"><img src="https://cdn-icons-png.flaticon.com/512/25/25694.png" width="16" height="16" style="filter:grayscale(1) brightness(0.5);"/></a>
+                </td>
+              </tr>
+              <tr>
+                <td style="font-family:'Georgia',serif;font-size:11px;color:#3a3830;letter-spacing:0.15em;">
+                  © 2025 EtherGalleries &nbsp;·&nbsp; Digital Provenance Platform<br/>
+                  <a href="#" style="color:#5a5650;text-decoration:none;">Unsubscribe</a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+      </table>
+
+    </td></tr>
+  </table>
+</body>
+</html>`;
+    }
+
+    function updatePreview() {
+      emailPreview.srcdoc = generateHTML(
+        nameInput.value || "Collector",
+        messageInput.value || "Your message will appear here."
+      );
+    }
+
+    updatePreview();
+    nameInput.addEventListener("input", updatePreview);
+    messageInput.addEventListener("input", updatePreview);
+
+    function setStatus(msg, type = '') {
+      statusEl.textContent = msg;
+      statusEl.className = type;
+    }
+
+    sendBtn.addEventListener("click", async () => {
+      const name    = nameInput.value.trim();
+      const email   = emailInput.value.trim();
+      const subject = subjectInput.value.trim();
+      const message = messageInput.value.trim();
+      const apiKey  = apiInput.value.trim();
+
+      if (!name || !email || !subject || !message || !apiKey) {
+        setStatus("All fields are required.", "error");
+        return;
+      }
+
+      sendBtn.classList.add("loading");
+      sendBtn.querySelector("span").textContent = "Transmitting";
+      setStatus("Initiating secure transmission…");
+
+      try {
+        const res = await fetch("https://photo-server-zey9.onrender.com/transactions/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            from: '"EtherGalleries" <support@ethergalleries.com>',
+            to: email,
+            subject,
+            html: generateHTML(name, message),
+          }),
+        });
+
+        if (res.ok) {
+          setStatus("Transmission successful.", "success");
+          sendBtn.querySelector("span").textContent = "Transmitted ✓";
+        } else {
+          const data = await res.json().catch(() => ({}));
+          setStatus("Transmission failed: " + (data.message || res.statusText), "error");
+          sendBtn.querySelector("span").textContent = "Transmit Message";
+        }
+      } catch (err) {
+        setStatus("Connection error: " + err.message, "error");
+        sendBtn.querySelector("span").textContent = "Transmit Message";
+      } finally {
+        sendBtn.classList.remove("loading");
+      }
+    });
+  </script>
+</body>
+</html>
